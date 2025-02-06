@@ -5,7 +5,7 @@ pipeline {
         DOTNET_CLI_HOME = "C:\\Program Files\\dotnet"
         REMOTE_SERVER = '65.1.73.66' // Replace with your application server IP
         REMOTE_USER = 'Administrator' // Use an appropriate user with SSH/WinRM access
-        REMOTE_PASSWORD = 'Te2DhBX;fk-PERauIYvOSuw?8%QMW?5;' // Securely manage credentials
+        REMOTE_PASSWORD = 'Test12.com&&' // Securely manage credentials
         REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot\\MyApp' // Path on remote server
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
     }
