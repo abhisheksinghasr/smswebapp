@@ -6,6 +6,8 @@ pipeline {
         REMOTE_SERVER = '13.235.65.246' // Application server IP
         REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot\\MyApp' // Deployment path on server
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
+        WINSCP_PATH = "C:\\Program Files (x86)\\WinSCP\\WinSCP.com"
+        HOST_KEY_FINGERPRINT = "ssh-ed25519 256 eMn9LBmr1totw0d9aWCdS9xzhFYhxoWNN2erk/TgeJM" // Corrected format
     }
 
     stages {
@@ -44,19 +46,13 @@ pipeline {
         stage('Transfer to Server') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    echo "Copying ZIP package to remote server using PowerShell Remoting..."
+                    echo "Transferring package to remote server using WinSCP..."
                     powershell '''
-                    $password = ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force
-                    $credential = New-Object System.Management.Automation.PSCredential ($env:USERNAME, $password)
-
-                    $session = New-PSSession -ComputerName $env:REMOTE_SERVER -Credential $credential
-
-                    Copy-Item -Path "$env:WORKSPACE\\$env:ZIP_FILE" `
-                              -Destination "\\$env:REMOTE_SERVER\C$\Deploy\$env:ZIP_FILE" `
-                              -ToSession $session `
-                              -Force
-
-                    Remove-PSSession $session
+                    $hostKey = "$env:HOST_KEY_FINGERPRINT"
+                    & "$env:WINSCP_PATH" /command `
+                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey=""$hostKey""" `  # Correct hostkey format
+                    "put ""$env:ZIP_FILE"" ""/C:/Deploy/$env:ZIP_FILE""" `  # Fix path formatting
+                    "exit"
                     '''
                 }
             }
@@ -67,16 +63,13 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     echo "Deploying application using PowerShell Remoting..."
                     powershell '''
-                    $password = ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force
-                    $credential = New-Object System.Management.Automation.PSCredential ($env:USERNAME, $password)
-
+                    $securePassword = ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force
+                    $credential = New-Object System.Management.Automation.PSCredential ($env:USERNAME, $securePassword)
                     $session = New-PSSession -ComputerName $env:REMOTE_SERVER -Credential $credential
-
                     Invoke-Command -Session $session -ScriptBlock {
                         Expand-Archive -Path "C:\\Deploy\\$env:ZIP_FILE" -DestinationPath "$env:REMOTE_APP_PATH" -Force
                         Restart-Service -Name MyDotNetAppService
                     }
-
                     Remove-PSSession $session
                     '''
                 }
