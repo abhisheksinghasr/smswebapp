@@ -56,7 +56,7 @@ pipeline {
                 script {
                     echo "Transferring package to remote server..."
                     bat """
-                    pscp -pw "${REMOTE_PASSWORD}" "${ZIP_FILE}" "${REMOTE_USER}@${REMOTE_SERVER}:C:\\Deploy\\${ZIP_FILE}"
+                    scp -pw "${REMOTE_PASSWORD}" "${ZIP_FILE}" "${REMOTE_USER}@${REMOTE_SERVER}:C:\\Deploy\\${ZIP_FILE}"
                     """
                 }
             }
