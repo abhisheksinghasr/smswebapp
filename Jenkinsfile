@@ -7,6 +7,7 @@ pipeline {
         REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot\\MyApp' // Deployment path on server
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
         WINSCP_PATH = "C:\\Program Files (x86)\\WinSCP\\WinSCP.com"
+        HOST_KEY_FINGERPRINT = "ssh-ed25519 255 SHA256:eMn9LBmr1totw0d9aWCdS9xzhFYhxoWNN2erk/TgeJM" // Updated fingerprint
     }
 
     stages {
@@ -48,8 +49,8 @@ pipeline {
                     echo "Transferring package to remote server using WinSCP..."
                     powershell '''
                     & "$env:WINSCP_PATH" /command `
-                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey=\\"ssh-ed25519 255 AAAAC3NzaC1lZDI1NTE5AAAAIOnb0Yta/43ovoF9HgjIv+SsllAM30Ym90rC3hI4gTYr\\"" `
-                    "put $env:ZIP_FILE \\"C:\\Deploy\\$env:ZIP_FILE\\"" `
+                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey=\"$env:HOST_KEY_FINGERPRINT\"" `
+                    "put $env:ZIP_FILE /C:/Deploy/$env:ZIP_FILE" `
                     "exit"
                     '''
                 }
@@ -61,10 +62,12 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     echo "Deploying application using PowerShell Remoting..."
                     powershell '''
-                    Invoke-Command -ComputerName $env:REMOTE_SERVER -Credential (New-Object System.Management.Automation.PSCredential ($env:USERNAME, (ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force))) -ScriptBlock {
+                    $session = New-PSSession -ComputerName $env:REMOTE_SERVER -Credential (New-Object System.Management.Automation.PSCredential ($env:USERNAME, (ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force)))
+                    Invoke-Command -Session $session -ScriptBlock {
                         Expand-Archive -Path "C:\\Deploy\\$env:ZIP_FILE" -DestinationPath "$env:REMOTE_APP_PATH" -Force
                         Restart-Service -Name MyDotNetAppService
                     }
+                    Remove-PSSession $session
                     '''
                 }
             }
