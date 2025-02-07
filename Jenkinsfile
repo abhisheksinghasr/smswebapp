@@ -50,7 +50,7 @@ pipeline {
                     powershell '''
                     $hostKey = "$env:HOST_KEY_FINGERPRINT"
                     & "$env:WINSCP_PATH" /command `
-                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey=""$hostKey""" `  # Correct hostkey format
+                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/" `  # Correct hostkey format
                     "put ""$env:ZIP_FILE"" ""/C:/Deploy/$env:ZIP_FILE""" `  # Fix path formatting
                     "exit"
                     '''
