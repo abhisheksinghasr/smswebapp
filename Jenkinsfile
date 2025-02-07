@@ -48,8 +48,8 @@ pipeline {
                     echo "Transferring package to remote server using WinSCP..."
                     powershell '''
                     & "$env:WINSCP_PATH" /command `
-                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey =\\"ssh-ed25519 255 AAAAC3NzaC1lZDI1NTE5AAAAIOnb0Yta/43ovoF9HgjIv+SsllAM30Ym90rC3hI4gTYr\\"" `
-                    "put $env:ZIP_FILE /C:/Deploy/$env:ZIP_FILE" `
+                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey=\\"ssh-ed25519 255 AAAAC3NzaC1lZDI1NTE5AAAAIOnb0Yta/43ovoF9HgjIv+SsllAM30Ym90rC3hI4gTYr\\"" `
+                    "put $env:ZIP_FILE \\"C:\\Deploy\\$env:ZIP_FILE\\"" `
                     "exit"
                     '''
                 }
@@ -61,12 +61,10 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     echo "Deploying application using PowerShell Remoting..."
                     powershell '''
-                    $session = New-PSSession -ComputerName $env:REMOTE_SERVER -Credential (New-Object System.Management.Automation.PSCredential ($env:USERNAME, (ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force)))
-                    Invoke-Command -Session $session -ScriptBlock {
+                    Invoke-Command -ComputerName $env:REMOTE_SERVER -Credential (New-Object System.Management.Automation.PSCredential ($env:USERNAME, (ConvertTo-SecureString $env:PASSWORD -AsPlainText -Force))) -ScriptBlock {
                         Expand-Archive -Path "C:\\Deploy\\$env:ZIP_FILE" -DestinationPath "$env:REMOTE_APP_PATH" -Force
                         Restart-Service -Name MyDotNetAppService
                     }
-                    Remove-PSSession $session
                     '''
                 }
             }
