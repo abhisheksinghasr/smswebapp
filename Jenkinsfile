@@ -7,7 +7,7 @@ pipeline {
         REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot\\MyApp' // Deployment path on the server
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
         WINSCP_PATH = "C:\\Program Files (x86)\\WinSCP\\WinSCP.com"
-        HOST_KEY_FINGERPRINT = "ssh-ed25519 255 eMn9LBmr1totw0d9aWCdS9xzhFYhxoWNN2erk/TgeJM" // Correct host key
+        HOST_KEY_FINGERPRINT = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOnb0Yta/43ovoF9HgjIv+SsllAM30Ym90rC3hI4gTYr" // Correct host key
     }
 
     stages {
