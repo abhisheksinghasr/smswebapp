@@ -48,7 +48,7 @@ pipeline {
                     echo "Transferring package to remote server using WinSCP..."
                     powershell '''
                     & "$env:WINSCP_PATH" /command `
-                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey=\\"ssh-ed25519 255 jIwRDLiKZBV1NEIafqvPHIBSU3WzSDRyYlZ6llCZ14A\\"" `
+                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey =\\"ssh-ed25519 255 AAAAC3NzaC1lZDI1NTE5AAAAIOnb0Yta/43ovoF9HgjIv+SsllAM30Ym90rC3hI4gTYr\\"" `
                     "put $env:ZIP_FILE /C:/Deploy/$env:ZIP_FILE" `
                     "exit"
                     '''
