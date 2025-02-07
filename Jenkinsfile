@@ -7,7 +7,7 @@ pipeline {
         REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot\\MyApp' // Deployment path on server
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
         WINSCP_PATH = "C:\\Program Files (x86)\\WinSCP\\WinSCP.com"
-        HOST_KEY_FINGERPRINT = "ssh-ed25519 255 SHA256:/petFpuKfRJR/ss3a0WImjvOnin3HXB3VI+/gBqT2vM" // Updated fingerprint
+        HOST_KEY_FINGERPRINT = "ssh-ed25519 255 eMn9LBmr1totw0d9aWCdS9xzhFYhxoWNN2erk/TgeJM" // Updated fingerprint
     }
 
     stages {
@@ -49,7 +49,7 @@ pipeline {
                     echo "Transferring package to remote server using WinSCP..."
                     powershell '''
                     & "$env:WINSCP_PATH" /command `
-                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/" `
+                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey=$env:HOST_KEY_FINGERPRINT" `
                     "put $env:ZIP_FILE /C:/Deploy/$env:ZIP_FILE" `
                     "exit"
                     '''
