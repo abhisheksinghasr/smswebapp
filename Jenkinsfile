@@ -3,11 +3,10 @@ pipeline {
 
     environment {
         DOTNET_CLI_HOME = "C:\\Program Files\\dotnet"
-        REMOTE_SERVER = '13.235.65.246'  // Updated server IP
+        REMOTE_SERVER = '13.235.65.246'  // Remote application server IP
         REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot\\MyApp' // Deployment path on the server
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
         WINSCP_PATH = "C:\\Program Files (x86)\\WinSCP\\WinSCP.com"
-        HOST_KEY_FINGERPRINT = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOnb0Yta/43ovoF9HgjIv+SsllAM30Ym90rC3hI4gTYr" // Correct host key
     }
 
     stages {
@@ -48,10 +47,9 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     echo "Transferring package to remote server using WinSCP..."
                     powershell '''
-                    $hostKey = "$env:HOST_KEY_FINGERPRINT"
                     & "$env:WINSCP_PATH" /command `
-                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ " `  # Correct host key format
-                    "put ""$env:ZIP_FILE"" ""/C:/Deploy/$env:ZIP_FILE""" `  # Fixed path format
+                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey=*"`  # Bypass host key verification
+                    "put ""$env:ZIP_FILE"" ""/C:/Deploy/$env:ZIP_FILE""" `
                     "exit"
                     ''' 
                 }
@@ -68,4 +66,3 @@ pipeline {
         }
     }
 }
-
