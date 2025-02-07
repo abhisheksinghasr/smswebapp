@@ -5,7 +5,7 @@ $ZIP_FILE = "app-43.zip"  # Replace with the actual ZIP file name
 $WINSCP_PATH = "C:\Program Files (x86)\WinSCP\WinSCP.com"
 $HOST_KEY_FINGERPRINT = "ssh-ed25519 255 eMn9LBmr1totw0d9aWCdS9xzhFYhxoWNN2erk/TgeJM"  # Correct host key
 $USERNAME = "administrator"  # Your SSH username
-$PASSWORD = "your-password"  # Your SSH password (Replace it securely)
+$PASSWORD = "Test12.com"  # Your SSH password (Replace it securely)
 
 # Run the WinSCP command manually
 & "$WINSCP_PATH" /command `
