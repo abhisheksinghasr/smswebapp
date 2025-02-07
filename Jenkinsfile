@@ -7,7 +7,7 @@ pipeline {
         REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot\\MyApp' // Deployment path on server
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
         WINSCP_PATH = "C:\\Program Files (x86)\\WinSCP\\WinSCP.com"
-        HOST_KEY_FINGERPRINT = "ssh-ed25519 256 eMn9LBmr1totw0d9aWCdS9xzhFYhxoWNN2erk/TgeJM" // Corrected format
+        HOST_KEY_FINGERPRINT = "ssh-rsa 2048 SHA256:4D2EB2C5385D6FDE5A7F3305AE04A8511A99E429AC7ADDC55AB5501DDF7EF954" // Corrected format
     }
 
     stages {
@@ -50,7 +50,7 @@ pipeline {
                     powershell '''
                     $hostKey = "$env:HOST_KEY_FINGERPRINT"
                     & "$env:WINSCP_PATH" /command `
-                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/" `  # Correct hostkey format
+                    "open sftp://$env:USERNAME:$env:PASSWORD@$env:REMOTE_SERVER/ -hostkey="$hostKey"" `  # Correct hostkey format
                     "put ""$env:ZIP_FILE"" ""/C:/Deploy/$env:ZIP_FILE""" `  # Fix path formatting
                     "exit"
                     '''
