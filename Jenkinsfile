@@ -47,10 +47,10 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     echo "Transferring package to remote server using WinSCP..."
                     bat """
-                        ${WINSCP_PATH} /command ^
-                        "open sftp://%USERNAME%:%PASSWORD%@${REMOTE_SERVER}/ -hostkey=*" ^
-                        "mkdir /C:/Deploy" ^
-                        "put \\"${ZIP_FILE}\\" \\"/C:/Deploy/${ZIP_FILE}\\"" ^
+                        ${WINSCP_PATH} /command ^ 
+                        "open sftp://%USERNAME%:%PASSWORD%@${REMOTE_SERVER}/ -hostkey=*" ^ 
+                        "mkdir /C/Deploy" ^ 
+                        "put \\"${ZIP_FILE}\\" \\"/C/Deploy/${ZIP_FILE}\\"" ^ 
                         "exit"
                     """
                 }
