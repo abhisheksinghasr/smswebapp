@@ -42,6 +42,25 @@ pipeline {
             }
         }
 
+        stage('Create Deploy Folder on Server') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'WIN_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
+                    script {
+                        powershell """
+                        \$securePassword = ConvertTo-SecureString '\${REMOTE_PASSWORD}' -AsPlainText -Force
+                        \$cred = New-Object System.Management.Automation.PSCredential ('\${REMOTE_USER}', \$securePassword)
+
+                        Invoke-Command -ComputerName '\${REMOTE_SERVER}' -Credential \$cred -ScriptBlock {
+                            if (!(Test-Path 'C:\\Deploy')) {
+                                New-Item -Path 'C:\\Deploy' -ItemType Directory -Force
+                            }
+                        }
+                        """
+                    }
+                }
+            }
+        }
+
         stage('Transfer to Server') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
@@ -49,8 +68,7 @@ pipeline {
                     bat """
                         ${WINSCP_PATH} /command ^
                         "open sftp://%USERNAME%:%PASSWORD%@${REMOTE_SERVER}/ -hostkey=*" ^
-                        "mkdir /Deploy" ^
-                        "put ${ZIP_FILE} /Deploy/${ZIP_FILE}" ^
+                        "put ${ZIP_FILE} C:/Deploy/${ZIP_FILE}" ^
                         "exit"
                     """
                 }
@@ -59,12 +77,19 @@ pipeline {
 
         stage('Deploy on Server') {
             steps {
-                echo "Extracting and running the application on the remote server..."
-                bat """
-                    ssh %USERNAME%@${REMOTE_SERVER} ^
-                    "powershell Expand-Archive -Path 'C:\\Deploy\\${ZIP_FILE}' -DestinationPath '${REMOTE_APP_PATH}' -Force; ^
-                    Start-Process -FilePath '${REMOTE_APP_PATH}\\MyApp.exe'"
-                """
+                withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
+                    script {
+                        powershell """
+                        \$securePassword = ConvertTo-SecureString '\${REMOTE_PASSWORD}' -AsPlainText -Force
+                        \$cred = New-Object System.Management.Automation.PSCredential ('\${REMOTE_USER}', \$securePassword)
+
+                        Invoke-Command -ComputerName '\${REMOTE_SERVER}' -Credential \$cred -ScriptBlock {
+                            Expand-Archive -Path 'C:\\Deploy\\${ZIP_FILE}' -DestinationPath '${REMOTE_APP_PATH}' -Force
+                            Start-Process -FilePath '${REMOTE_APP_PATH}\\MyApp.exe'
+                        }
+                        """
+                    }
+                }
             }
         }
     }
