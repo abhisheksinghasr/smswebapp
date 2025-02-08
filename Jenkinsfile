@@ -47,13 +47,24 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     echo "Transferring package to remote server using WinSCP..."
                     bat """
-                        ${WINSCP_PATH} /command ^ 
-                        "open sftp://%USERNAME%:%PASSWORD%@${REMOTE_SERVER}/ -hostkey=*" ^ 
-                        "mkdir /C/Deploy" ^ 
-                        "put \\"${ZIP_FILE}\\" \\"/C/Deploy/${ZIP_FILE}\\"" ^ 
+                        ${WINSCP_PATH} /command ^
+                        "open sftp://%USERNAME%:%PASSWORD%@${REMOTE_SERVER}/ -hostkey=*" ^
+                        "mkdir /Deploy" ^
+                        "put ${ZIP_FILE} /Deploy/${ZIP_FILE}" ^
                         "exit"
                     """
                 }
+            }
+        }
+
+        stage('Deploy on Server') {
+            steps {
+                echo "Extracting and running the application on the remote server..."
+                bat """
+                    ssh %USERNAME%@${REMOTE_SERVER} ^
+                    "powershell Expand-Archive -Path 'C:\\Deploy\\${ZIP_FILE}' -DestinationPath '${REMOTE_APP_PATH}' -Force; ^
+                    Start-Process -FilePath '${REMOTE_APP_PATH}\\MyApp.exe'"
+                """
             }
         }
     }
