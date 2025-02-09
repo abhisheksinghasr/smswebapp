@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOTNET_CLI_HOME = "C:\\Program Files\\dotnet"
         REMOTE_SERVER = '13.203.29.59'  // Remote application server IP
-        REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot\\MyApp' // Deployment path on the server
+        REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot' // Deployment path on the server
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
         WINSCP_PATH = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\""
     }
@@ -42,25 +42,6 @@ pipeline {
             }
         }
 
-        stage('Create Deploy Folder on Server') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
-                    script {
-                        powershell """
-                        \$securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
-                        \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
-
-                        Invoke-Command -ComputerName '${REMOTE_SERVER}' -Credential \$cred -ScriptBlock {
-                            if (!(Test-Path 'C:\\Deploy')) {
-                                New-Item -Path 'C:\\Deploy' -ItemType Directory -Force
-                            }
-                        }
-                        """
-                    }
-                }
-            }
-        }
-
         stage('Transfer to Server') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
@@ -68,8 +49,8 @@ pipeline {
                     bat """
                         ${WINSCP_PATH} /command ^
                         "open sftp://%USERNAME%:%PASSWORD%@${REMOTE_SERVER}/ -hostkey=*" ^
-                        "mkdir /Deploy" ^
-                        "put ${ZIP_FILE} /Deploy/${ZIP_FILE}" ^
+                        "mkdir /inetpub/wwwroot" ^
+                        "put ${ZIP_FILE} /inetpub/wwwroot/${ZIP_FILE}" ^
                         "exit"
                     """
                 }
@@ -85,8 +66,17 @@ pipeline {
                         \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
 
                         Invoke-Command -ComputerName '${REMOTE_SERVER}' -Credential \$cred -ScriptBlock {
-                            Expand-Archive -Path 'C:\\Deploy\\${ZIP_FILE}' -DestinationPath '${REMOTE_APP_PATH}' -Force
-                            Start-Process -FilePath '${REMOTE_APP_PATH}\\MyApp.exe'
+                            if (!(Test-Path 'C:\\inetpub\\wwwroot')) {
+                                New-Item -Path 'C:\\inetpub\\wwwroot' -ItemType Directory -Force
+                            }
+
+                            Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
+                            
+                            Write-Host "✅ Extraction completed!"
+
+                            # Restart IIS
+                            Restart-Service -Name W3SVC -Force
+                            Write-Host "🔄 IIS Restarted!"
                         }
                         """
                     }
