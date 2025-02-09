@@ -44,7 +44,7 @@ pipeline {
 
         stage('Create Deploy Folder on Server') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'WIN_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
+                withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
                     script {
                         powershell """
                         \$securePassword = ConvertTo-SecureString '\${REMOTE_PASSWORD}' -AsPlainText -Force
