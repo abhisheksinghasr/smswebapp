@@ -3,10 +3,14 @@ pipeline {
 
     environment {
         DOTNET_CLI_HOME = "C:\\Program Files\\dotnet"
-        REMOTE_SERVER = '15.207.121.235'  // Remote server IP
-        REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot' // Deployment path
-        ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
         WINSCP_PATH = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\""
+        REMOTE_APP_PATH = "C:\\inetpub\\wwwroot"
+        ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
+        TARGET_GROUP_ARN = "arn:aws:elasticloadbalancing:region:account-id:targetgroup/your-target-group"
+    }
+
+    parameters {
+        string(name: 'SERVERS', defaultValue: '15.207.121.235,15.207.121.236,15.207.121.237,15.207.121.238', description: 'Comma-separated list of servers')
     }
 
     stages {
@@ -42,65 +46,63 @@ pipeline {
             }
         }
 
-        stage('Create Deploy Folder on Server') {
+        stage('Deploy to Servers') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
-                    script {
-                        powershell """
-                        \$securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
-                        \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
+                script {
+                    def servers = params.SERVERS.tokenize(',')
 
-                        Invoke-Command -ComputerName '${REMOTE_SERVER}' -Credential \$cred -ScriptBlock {
-                            if (!(Test-Path 'C:\\inetpub\\wwwroot')) {
-                                New-Item -Path 'C:\\inetpub\\wwwroot' -ItemType Directory -Force
-                                Write-Host "✅ Folder Created: C:\\inetpub\\wwwroot"
-                            } else {
-                                Write-Host "✅ Folder Already Exists: C:\\inetpub\\wwwroot"
+                    for (server in servers) {
+                        echo "🚀 Starting deployment on ${server}"
+
+                        // Step 1: Deregister the instance from TG
+                        withAWS(credentials: 'AWS_CREDENTIALS_ID', region: 'your-region') {
+                            sh """
+                                aws elbv2 deregister-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${server}
+                            """
+                        }
+                        sleep(time: 30, unit: 'SECONDS')
+
+                        // Step 2: Deploy code
+                        withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                            bat """
+                                ${WINSCP_PATH} /command ^
+                                "open sftp://%USERNAME%:%PASSWORD%@${server}/ -hostkey=*" ^
+                                "put ${ZIP_FILE} C:/Deploy/${ZIP_FILE}" ^
+                                "exit"
+                            """
+                        }
+
+                        withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
+                            powershell """
+                                \$securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
+                                \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
+
+                                Invoke-Command -ComputerName '${server}' -Credential \$cred -ScriptBlock {
+                                    Stop-Service W3SVC -Force
+                                    Expand-Archive -Path 'C:\\Deploy\\${ZIP_FILE}' -DestinationPath '${REMOTE_APP_PATH}' -Force
+                                    Start-Service W3SVC
+                                }
+                            """
+                        }
+
+                        // Step 3: Register instance back to TG
+                        withAWS(credentials: 'AWS_CREDENTIALS_ID', region: 'your-region') {
+                            sh """
+                                aws elbv2 register-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${server}
+                            """
+                        }
+
+                        // Step 4: Wait until instance is healthy
+                        timeout(time: 300, unit: 'SECONDS') {
+                            waitUntil {
+                                def healthCheck = sh(script: """
+                                    aws elbv2 describe-target-health --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${server} --query 'TargetHealthDescriptions[*].TargetHealth.State' --output text
+                                """, returnStdout: true).trim()
+                                return healthCheck == "healthy"
                             }
                         }
-                        """
-                    }
-                }
-            }
-        }
 
-        stage('Transfer to Server') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    echo "🚀 Transferring package to remote server using WinSCP..."
-                    bat """
-                        ${WINSCP_PATH} /command ^
-                        "open sftp://%USERNAME%:%PASSWORD%@${REMOTE_SERVER}/ -hostkey=*" ^
-                        "put ${ZIP_FILE} C:/inetpub/wwwroot/${ZIP_FILE}" ^
-                        "exit"
-                    """
-                }
-            }
-        }
-
-        stage('Deploy on Server') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
-                    script {
-                        powershell """
-                        \$securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
-                        \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
-
-                        Invoke-Command -ComputerName '${REMOTE_SERVER}' -Credential \$cred -ScriptBlock {
-                            Write-Host "✅ Checking if C:\\inetpub\\wwwroot exists..."
-                            if (!(Test-Path 'C:\\inetpub\\wwwroot')) {
-                                New-Item -Path 'C:\\inetpub\\wwwroot' -ItemType Directory -Force
-                                Write-Host "✅ Created Folder: C:\\inetpub\\wwwroot"
-                            }
-
-                            Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
-                            Write-Host "✅ Extraction Completed!"
-
-                            # Restart IIS
-                            Restart-Service -Name W3SVC -Force
-                            Write-Host "🔄 IIS Restarted!"
-                        }
-                        """
+                        echo "✅ Deployment on ${server} completed!"
                     }
                 }
             }
@@ -109,7 +111,7 @@ pipeline {
 
     post {
         success {
-            echo '✅ Deployment successful!!'
+            echo '✅ Deployment successful on all servers!'
         }
         failure {
             echo '❌ Deployment failed!'
