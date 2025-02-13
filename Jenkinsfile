@@ -6,11 +6,11 @@ pipeline {
         WINSCP_PATH = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\""
         REMOTE_APP_PATH = "C:\\inetpub\\wwwroot"
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
-        TARGET_GROUP_ARN = "arn:aws:elasticloadbalancing:region:account-id:targetgroup/your-target-group"
+        TARGET_GROUP_ARN = "arn:aws:elasticloadbalancing:ap-south-1:381492095921:targetgroup/cicd-jenkins/d742fdbd78cf30bb"
     }
 
     parameters {
-        string(name: 'SERVERS', defaultValue: '15.207.121.235,15.207.121.236,15.207.121.237,15.207.121.238', description: 'Comma-separated list of servers')
+        string(name: 'SERVERS', defaultValue: '3.7.54.74,13.127.150.22,13.201.2.42,3.110.132.242', description: 'Comma-separated list of servers')
     }
 
     stages {
@@ -118,3 +118,4 @@ pipeline {
         }
     }
 }
+
