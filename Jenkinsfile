@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOTNET_CLI_HOME = "C:\\Program Files\\dotnet"
-        REMOTE_SERVER = '3.7.54.74'  // Remote server IP
+        REMOTE_SERVER = '13.127.150.22'  // Remote server IP
         REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot' // Deployment path
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
         WINSCP_PATH = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\""
