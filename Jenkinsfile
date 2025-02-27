@@ -7,6 +7,9 @@ pipeline {
         REMOTE_APP_PATH = 'C:\\inetpub\\wwwroot' // Deployment path
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
         WINSCP_PATH = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\""
+        AWS_REGION = 'ap-south-1'   // Change to your AWS region
+        TARGET_GROUP_ARN = 'arn:aws:elasticloadbalancing:ap-south-1:354161983344:targetgroup/loadtestapiTG/8ed96c22513d8d2d'
+        INSTANCE_ID = 'i-04fcb84dc30dbf4d9'  // Retrieve dynamically if using Auto Scaling
     }
 
     stages {
@@ -16,51 +19,26 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Deregister from Target Group') {
+            steps {
+                script {
+                    echo "🚫 Deregistering instance ${INSTANCE_ID} from Target Group..."
+                    def deregisterCmd = """
+                        aws elbv2 deregister-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${INSTANCE_ID} --region ${AWS_REGION}
+                    """
+                    bat deregisterCmd
+                    sleep(time: 30)  // Wait for traffic to drain
+                }
+            }
+        }
+
+        stage('Build & Package') {
             steps {
                 bat "dotnet restore"
                 bat "dotnet build --configuration Release"
-            }
-        }
-
-        stage('Test') {
-            steps {
                 bat "dotnet test --no-restore --configuration Release"
-            }
-        }
-
-        stage('Publish') {
-            steps {
                 bat "dotnet publish --no-restore --configuration Release --output .\\publish"
-            }
-        }
-
-        stage('Package') {
-            steps {
-                echo "📦 Creating ZIP package..."
                 bat "powershell Compress-Archive -Path publish\\* -DestinationPath ${ZIP_FILE} -Force"
-            }
-        }
-
-        stage('Create Deploy Folder on Server') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
-                    script {
-                        powershell """
-                        \$securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
-                        \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
-
-                        Invoke-Command -ComputerName '${REMOTE_SERVER}' -Credential \$cred -ScriptBlock {
-                            if (!(Test-Path 'C:\\inetpub\\wwwroot')) {
-                                New-Item -Path 'C:\\inetpub\\wwwroot' -ItemType Directory -Force
-                                Write-Host "✅ Folder Created: C:\\inetpub\\wwwroot"
-                            } else {
-                                Write-Host "✅ Folder Already Exists: C:\\inetpub\\wwwroot"
-                            }
-                        }
-                        """
-                    }
-                }
             }
         }
 
@@ -87,21 +65,31 @@ pipeline {
                         \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
 
                         Invoke-Command -ComputerName '${REMOTE_SERVER}' -Credential \$cred -ScriptBlock {
-                            Write-Host "✅ Checking if C:\\inetpub\\wwwroot exists..."
-                            if (!(Test-Path 'C:\\inetpub\\wwwroot')) {
-                                New-Item -Path 'C:\\inetpub\\wwwroot' -ItemType Directory -Force
-                                Write-Host "✅ Created Folder: C:\\inetpub\\wwwroot"
-                            }
-
                             Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
-                            Write-Host "✅ Extraction Completed!"
-
-                            # Restart IIS
                             Restart-Service -Name W3SVC -Force
-                            Write-Host "🔄 IIS Restarted!"
+                            Write-Host "✅ Deployment Completed!"
                         }
                         """
                     }
+                }
+            }
+        }
+
+        stage('Register Back to Target Group') {
+            steps {
+                script {
+                    echo "🔄 Registering instance ${INSTANCE_ID} back to Target Group..."
+                    def registerCmd = """
+                        aws elbv2 register-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${INSTANCE_ID} --region ${AWS_REGION}
+                    """
+                    bat registerCmd
+
+                    echo "⏳ Waiting for instance to become healthy..."
+                    def waitForHealthyCmd = """
+                        aws elbv2 wait target-in-service --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${INSTANCE_ID} --region ${AWS_REGION}
+                    """
+                    bat waitForHealthyCmd
+                    echo "✅ Instance is healthy!"
                 }
             }
         }
