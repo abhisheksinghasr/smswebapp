@@ -26,7 +26,7 @@ pipeline {
             }
         }
 
-        stage('Deploy to Multiple Servers') {
+        stage('Deploy to Servers Sequentially') {
             steps {
                 script {
                     def servers = [
@@ -34,60 +34,54 @@ pipeline {
                         [ip: '10.50.1.34', instanceId: 'i-0e36bd3304b1008db']
                     ]
 
-                    def parallelStages = [:]
-                    
                     for (server in servers) {
                         def remoteServer = server.ip
                         def instanceId = server.instanceId
 
-                        parallelStages["Deploy to ${remoteServer}"] = {
-                            stage("Deregister ${remoteServer} from TG") {
-                                echo "🚫 Deregistering instance ${instanceId} from Target Group..."
-                                bat "aws elbv2 deregister-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
-                                sleep(time: 30)  // Wait for traffic to drain
-                            }
+                        stage("Deregister ${remoteServer} from TG") {
+                            echo "🚫 Deregistering instance ${instanceId} from Target Group..."
+                            bat "aws elbv2 deregister-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
+                            sleep(time: 30)  // Allow time for traffic to drain
+                        }
 
-                            stage("Transfer to ${remoteServer}") {
-                                withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                                    echo "🚀 Transferring package to ${remoteServer} using WinSCP..."
-                                    bat """
-                                        ${WINSCP_PATH} /command ^
-                                        "open sftp://%USERNAME%:%PASSWORD%@${remoteServer}/ -hostkey=*" ^
-                                        "put ${ZIP_FILE} C:/inetpub/wwwroot/${ZIP_FILE}" ^
-                                        "exit"
+                        stage("Transfer to ${remoteServer}") {
+                            withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                                echo "🚀 Transferring package to ${remoteServer} using WinSCP..."
+                                bat """
+                                    ${WINSCP_PATH} /command ^
+                                    "open sftp://%USERNAME%:%PASSWORD%@${remoteServer}/ -hostkey=*" ^
+                                    "put ${ZIP_FILE} C:/inetpub/wwwroot/${ZIP_FILE}" ^
+                                    "exit"
+                                """
+                            }
+                        }
+
+                        stage("Deploy on ${remoteServer}") {
+                            withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
+                                script {
+                                    powershell """
+                                    \$securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
+                                    \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
+
+                                    Invoke-Command -ComputerName '${remoteServer}' -Credential \$cred -ScriptBlock {
+                                        Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
+                                        Restart-Service -Name W3SVC -Force
+                                        Write-Host "✅ Deployment Completed on ${remoteServer}!"
+                                    }
                                     """
                                 }
                             }
+                        }
 
-                            stage("Deploy on ${remoteServer}") {
-                                withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
-                                    script {
-                                        powershell """
-                                        \$securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
-                                        \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
+                        stage("Register ${remoteServer} Back to TG") {
+                            echo "🔄 Registering instance ${instanceId} back to Target Group..."
+                            bat "aws elbv2 register-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
 
-                                        Invoke-Command -ComputerName '${remoteServer}' -Credential \$cred -ScriptBlock {
-                                            Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
-                                            Restart-Service -Name W3SVC -Force
-                                            Write-Host "✅ Deployment Completed on ${remoteServer}!"
-                                        }
-                                        """
-                                    }
-                                }
-                            }
-
-                            stage("Register ${remoteServer} Back to TG") {
-                                echo "🔄 Registering instance ${instanceId} back to Target Group..."
-                                bat "aws elbv2 register-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
-
-                                echo "⏳ Waiting for instance ${instanceId} to become healthy..."
-                                bat "aws elbv2 wait target-in-service --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
-                                echo "✅ Instance ${instanceId} is healthy!"
-                            }
+                            echo "⏳ Waiting for instance ${instanceId} to become healthy..."
+                            bat "aws elbv2 wait target-in-service --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
+                            echo "✅ Instance ${instanceId} is healthy!"
                         }
                     }
-
-                    parallel parallelStages
                 }
             }
         }
