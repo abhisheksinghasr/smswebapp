@@ -41,7 +41,7 @@ pipeline {
                         stage("Deregister ${remoteServer} from TG") {
                             echo "🚫 Deregistering instance ${instanceId} from Target Group..."
                             bat "aws elbv2 deregister-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
-                            sleep(time: 30)  // Allow time for traffic to drain
+                            sleep(time: 30)  // Allow time for traffic to drains
                         }
 
                         stage("Transfer to ${remoteServer}") {
