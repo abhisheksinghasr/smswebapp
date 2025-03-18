@@ -67,12 +67,12 @@ pipeline {
                                     \$securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
                                     \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
 
-                                    Invoke-Command -ComputerName '${remoteServer}' -Credential $cred -ScriptBlock {
+                                    Invoke-Command -ComputerName '${remoteServer}' -Credential \$cred -ScriptBlock {
                                         Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
                                         Restart-Service -Name W3SVC -Force
                                         Write-Host "✅ Deployment Completed on ${remoteServer}!"
                                     }
-                                    """)
+                                    """
                                     if (deployResult != 0) {
                                         error("Failed to deploy on ${remoteServer}")
                                     }
