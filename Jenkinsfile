@@ -61,7 +61,7 @@ pipeline {
                                 Invoke-Command -ComputerName '${remoteServer}' -ScriptBlock {
                                     $securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
                                     $cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', $securePassword)
-                                    Expand-Archive -Path 'C:\inetpub\wwwroot\${ZIP_FILE}' -DestinationPath 'C:\inetpub\wwwroot' -Force
+                                    Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
                                     Restart-Service -Name W3SVC -Force
                                     Write-Host "✅ Deployment Completed on ${remoteServer}!"
                                 } -Credential $cred
