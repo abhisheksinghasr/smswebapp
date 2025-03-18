@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOTNET_CLI_HOME = "C:\\Program Files\\dotnet"
-        WINSCP_PATH = "C:\\Program Files (x86)\\WinSCP\\WinSCP.com"
+        WINSCP_PATH = "\"C:\\Program Files (x86)\\WinSCP\\WinSCP.com\""
         AWS_REGION = 'ap-south-1'
         TARGET_GROUP_ARN = 'arn:aws:elasticloadbalancing:ap-south-1:354161983344:targetgroup/loadtestapiTG/8ed96c22513d8d2d'
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
@@ -40,47 +40,45 @@ pipeline {
 
                         stage("Deregister ${remoteServer} from TG") {
                             echo "🚫 Deregistering instance ${instanceId} from Target Group..."
-                            if (bat(returnStatus: true, script: "aws elbv2 deregister-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}") != 0) {
-                                error("Failed to deregister ${remoteServer} from Target Group")
-                            }
-                            sleep(time: 30)  // Allow time for traffic to drain
+                            bat "aws elbv2 deregister-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
+                            sleep(time: 30)  // Allow time for traffic to drains
                         }
 
                         stage("Transfer to ${remoteServer}") {
                             withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                                 echo "🚀 Transferring package to ${remoteServer} using WinSCP..."
-                                if (bat(returnStatus: true, script: "\"${WINSCP_PATH}\" /command ^\n                                    \"open sftp://%USERNAME%:%PASSWORD%@${remoteServer}/ -hostkey=*\" ^\n                                    \"put ${ZIP_FILE} C:/inetpub/wwwroot/${ZIP_FILE}\" ^\n                                    \"exit\"") != 0) {
-                                    error("Failed to transfer package to ${remoteServer}")
-                                }
+                                bat """
+                                    ${WINSCP_PATH} /command ^
+                                    "open sftp://%USERNAME%:%PASSWORD%@${remoteServer}/ -hostkey=*" ^
+                                    "put ${ZIP_FILE} C:/inetpub/wwwroot/${ZIP_FILE}" ^
+                                    "exit"
+                                """
                             }
                         }
 
                         stage("Deploy on ${remoteServer}") {
                             withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
-                                powershell """
-                                Invoke-Command -ComputerName '${remoteServer}' -ScriptBlock {
-                                    $securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
-                                    $cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', $securePassword)
-                                    Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
-                                    Restart-Service -Name W3SVC -Force
-                                    Write-Host "✅ Deployment Completed on ${remoteServer}!"
-                                } -Credential $cred
-                                """
+                                script {
+                                    powershell """
+                                    \$securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
+                                    \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
+
+                                    Invoke-Command -ComputerName '${remoteServer}' -Credential \$cred -ScriptBlock {
+                                        Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
+                                        Restart-Service -Name W3SVC -Force
+                                        Write-Host "✅ Deployment Completed on ${remoteServer}!"
+                                    }
+                                    """
+                                }
                             }
                         }
 
                         stage("Register ${remoteServer} Back to TG") {
                             echo "🔄 Registering instance ${instanceId} back to Target Group..."
-                            if (bat(returnStatus: true, script: "aws elbv2 register-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}") != 0) {
-                                error("Failed to register ${remoteServer} back to Target Group")
-                            }
+                            bat "aws elbv2 register-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
 
                             echo "⏳ Waiting for instance ${instanceId} to become healthy..."
-                            retry(3) {
-                                if (bat(returnStatus: true, script: "aws elbv2 wait target-in-service --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}") != 0) {
-                                    error("Instance ${instanceId} did not become healthy")
-                                }
-                            }
+                            bat "aws elbv2 wait target-in-service --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
                             echo "✅ Instance ${instanceId} is healthy!"
                         }
                     }
@@ -98,3 +96,30 @@ pipeline {
         }
     }
 }
+
+
+
+
+
+
+==================================================================================
+
+stage("Deploy on ${remoteServer}") {
+                            withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
+                                script {
+                                    def deployResult = powershell(returnStatus: true, script: """
+                                    $securePassword = ConvertTo-SecureString '${REMOTE_PASSWORD}' -AsPlainText -Force
+                                    $cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', $securePassword)
+
+                                    Invoke-Command -ComputerName '${remoteServer}' -Credential $cred -ScriptBlock {
+                                        Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
+                                        Restart-Service -Name W3SVC -Force
+                                        Write-Host "✅ Deployment Completed on ${remoteServer}!"
+                                    }
+                                    """)
+                                    if (deployResult != 0) {
+                                        error("Failed to deploy on ${remoteServer}")
+                                    }
+                                }
+                            }
+                        }
