@@ -7,6 +7,7 @@ pipeline {
         AWS_REGION = 'ap-south-1'
         TARGET_GROUP_ARN = 'arn:aws:elasticloadbalancing:ap-south-1:354161983344:targetgroup/loadtestapiTG/8ed96c22513d8d2d'
         ZIP_FILE = "app-${env.BUILD_NUMBER}.zip"
+        DEPLOY_SCRIPT = "deploy.ps1"
     }
 
     stages {
@@ -41,22 +42,23 @@ pipeline {
                         stage("Deregister ${remoteServer} from TG") {
                             echo "🚫 Deregistering instance ${instanceId} from Target Group..."
                             bat "aws elbv2 deregister-targets --target-group-arn ${TARGET_GROUP_ARN} --targets Id=${instanceId} --region ${AWS_REGION}"
-                            sleep(time: 30)  // Allow time for traffic to drains
+                            sleep(time: 30)  // Allow time for traffic to drain
                         }
 
                         stage("Transfer to ${remoteServer}") {
                             withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                                echo "🚀 Transferring package to ${remoteServer} using WinSCP..."
+                                echo "🚀 Transferring package and script to ${remoteServer} using WinSCP..."
                                 bat """
                                     ${WINSCP_PATH} /command ^
                                     "open sftp://%USERNAME%:%PASSWORD%@${remoteServer}/ -hostkey=*" ^
-                                    "put ${ZIP_FILE} C:/inetpub/wwwroot/${ZIP_FILE}" ^
+                                    "put ${ZIP_FILE} C:/CICD_build/${ZIP_FILE}" ^
+                                    "put ${DEPLOY_SCRIPT} C:/CICD_build/${DEPLOY_SCRIPT}" ^
                                     "exit"
                                 """
                             }
                         }
 
-                        stage("Deploy on ${remoteServer}") {
+                        stage("Execute Deployment Script on ${remoteServer}") {
                             withCredentials([usernamePassword(credentialsId: 'WINSCP_CRED', usernameVariable: 'REMOTE_USER', passwordVariable: 'REMOTE_PASSWORD')]) {
                                 script {
                                     powershell """
@@ -64,12 +66,9 @@ pipeline {
                                     \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
 
                                     Invoke-Command -ComputerName '${remoteServer}' -Credential \$cred -ScriptBlock {
-                                        if (-Not (Test-Path "C:\\inetpub\\wwwroot\\${ZIP_FILE}")) {
-                                            Write-Error "ZIP file not found at C:\\inetpub\\wwwroot\\${ZIP_FILE}"
-                                        }
-                                        Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
-                                        Restart-Service -Name W3SVC -Force
-                                        Write-Host "✅ Deployment Completed on ${remoteServer}!"
+                                        Write-Host "Executing Deployment Script..."
+                                        powershell -File 'C:\Users\Administrator\Desktop\deploy.ps1'
+                                        Write-Host "✅ Deployment Script Execution Completed on ${remoteServer}!"
                                     }
                                     """
                                 }
