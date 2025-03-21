@@ -64,6 +64,9 @@ pipeline {
                                     \$cred = New-Object System.Management.Automation.PSCredential ('${REMOTE_USER}', \$securePassword)
 
                                     Invoke-Command -ComputerName '${remoteServer}' -Credential \$cred -ScriptBlock {
+                                        if (-Not (Test-Path "C:\\inetpub\\wwwroot\\${ZIP_FILE}")) {
+                                            Write-Error "ZIP file not found at C:\\inetpub\\wwwroot\\${ZIP_FILE}"
+                                        }
                                         Expand-Archive -Path 'C:\\inetpub\\wwwroot\\${ZIP_FILE}' -DestinationPath 'C:\\inetpub\\wwwroot' -Force
                                         Restart-Service -Name W3SVC -Force
                                         Write-Host "✅ Deployment Completed on ${remoteServer}!"
